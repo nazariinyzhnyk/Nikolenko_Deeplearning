@@ -3,6 +3,13 @@
 Coding examples from perfect Nikolenko Deep Learning 
  [book](https://books.google.com.ua/books/about/Глубокое_обучение.html?id=Zi48DwAAQBAJ&redir_esc=y). <br />
 Adapted for 2019 year readers:)
+
+## ToDo's
+
+* Chapter 4 - add 10 experiments per network for statistical correctness.
+Add mean and variance to resulting plot.
+
+
 ## Authors
 
 * **Nazarii Nyzhnyk** - *Initial work* - [nazariinyzhnyk](https://github.com/nazariinyzhnyk)

@@ -1,16 +1,46 @@
 from keras.models import Sequential
-from keras.layers import Dense
+from keras.layers import Dense, BatchNormalization
 from keras.datasets import mnist
 from keras.utils import np_utils
+import plotly.graph_objects as go
+from itertools import product
+import pandas as pd
 
 
-def create_model(init):
+def expand_grid(dictionary):
+    return pd.DataFrame([row for row in product(*dictionary.values())],
+                        columns=dictionary.keys())
+
+
+def add_dense_layer(model, init, act, num_units=100, use_bn=False):
+    if use_bn:
+        model.add(BatchNormalization)
+    model.add(Dense(num_units, kernel_initializer=init, activation=act))
+    return model
+
+
+def plot_acc_loss(names, values, show_fig=True, save_fig=True, fig_name='losses'):
+    x_axis = [i + 1 for i in range(len(values[1]))]
+    fig = go.Figure()
+    for i in range(len(names)):
+        fig.add_trace(go.Scatter(x=x_axis, y=values[i],
+                                 mode='lines',
+                                 name=names[i]))
+    fig.update_layout(title=go.layout.Title(text=fig_name))
+    if show_fig:
+        fig.show()
+    if save_fig:
+        fig.write_image("images/" + fig_name + ".png")
+
+
+def create_model(init, act='tanh', num_dense=3, num_units=100, use_bn=False):
     model = Sequential()
-    model.add(Dense(100, input_shape=(28*28, ), init=init, activation='tanh'))
-    model.add(Dense(100, init=init, activation='tanh'))
-    model.add(Dense(100, init=init, activation='tanh'))
-    model.add(Dense(100, init=init, activation='tanh'))
-    model.add(Dense(10, init=init, activation='softmax'))
+    model.add(Dense(num_units, input_shape=(28 * 28,), kernel_initializer=init, activation=act))
+
+    for i in range(num_dense):
+        add_dense_layer(model, init=init, act=act, num_units=num_units, use_bn=use_bn)
+
+    model.add(Dense(10, kernel_initializer=init, activation='softmax'))
     return model
 
 
@@ -33,28 +63,30 @@ print('Train target shape: {}'.format(Y_train.shape))
 print('Test set shape    : {}'.format(X_test.shape))
 print('Test target shape : {}'.format(Y_test.shape))
 
-uniform_model = create_model('glorot_normal')  # uniform
-uniform_model.compile(loss='categorical_crossentropy', optimizer='sgd', metrics=['accuracy'])
-uniform_model.fit(X_train, Y_train,
-                  batch_size=64,
-                  epochs=20,
-                  verbose=1,
-                  validation_data=(X_test, Y_test))
+dictionary = {'initialization': ['uniform', 'glorot_normal', 'he_normal'],
+              'optimizer': ['sgd', 'adam'],
+              'use_bn': [True, False]}
 
-"""
-note that seeds are not fixed and results may differ!
+grid = expand_grid(dictionary)
+print(grid)
+print(len(grid))
 
-uniform distribution initialization:
-train loss: .1542
-train accuracy: .9653
-val loss: .1670
-val accuracy: .9535
+model_param_names = []
+model_param_accuracies = []
+model_param_losses = []
 
-glorot_normal (Xavier) distribution initialization:
-train loss: .088
-train accuracy: .9748
-val loss: .1034
-val accuracy: .9675
+for i in range(len(grid)):
+    model_param_names.append(grid['initialization'][i] + '_' + grid['optimizer'][i] + '_' + str(grid['use_bn'][i]))
+    model = create_model('he_normal', act='tanh', num_dense=3, num_units=100, use_bn=False)  # uniform
+    print(model.summary())
+    model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+    hist = model.fit(X_train, Y_train,
+                     batch_size=64,
+                     epochs=20,
+                     verbose=1,
+                     validation_data=(X_test, Y_test))
+    model_param_accuracies.append(hist.history['val_acc'])
+    model_param_losses.append(hist.history['val_loss'])
 
-"""
-
+plot_acc_loss(model_param_names, model_param_losses, show_fig=True, save_fig=True, fig_name='losses')
+plot_acc_loss(model_param_names, model_param_accuracies, show_fig=True, save_fig=True, fig_name='accuracies')
