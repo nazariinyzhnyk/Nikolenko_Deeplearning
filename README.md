@@ -8,6 +8,7 @@ Adapted for 2019 year readers:)
 
 * Chapter 4 - add 10 experiments per network for statistical correctness.
 Add mean and variance to resulting plot.
+* Chapter 5 - add visualization of noisy images and their decoded version.
 
 
 ## Authors
