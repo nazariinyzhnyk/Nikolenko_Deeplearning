@@ -1,7 +1,7 @@
 import os
 import numpy as np
-from keras.models import Sequential
-from keras.layers import Dense, Dropout, LSTM, TimeDistributed, Activation, Reshape
+from keras.models import Sequential, Model
+from keras.layers import Dense, Dropout, LSTM, TimeDistributed, Activation, Reshape, concatenate, Input
 from keras.optimizers import Adam
 from keras.callbacks import ModelCheckpoint, CSVLogger, Callback
 
@@ -13,7 +13,7 @@ chars = set([START_CHAR, '\n', END_CHAR])
 input_frame = 'shakespeare_short.txt'
 model_fname = 'model_keras'
 output_fname = 'output.txt'
-
+batchout_fname = 'batch_out.txt'
 
 with open(input_frame) as f:
     for line in f:
@@ -106,7 +106,7 @@ class CharSampler(Callback):
     def sample_one(self, T):
         result = START_CHAR
         while len(result) < 500:
-            Xsampled = np.zeros((1, len(result), num_chars))
+            Xsampled = np.zeros((1, len(result), num_chars))  # max_sentence_len
             for t, c in enumerate(list(result)):
                 Xsampled[0, t, :] = self.char_vectors[c]
             ysampled = self.model.predict(Xsampled, batch_size=1)[0, :]
@@ -130,12 +130,60 @@ class CharSampler(Callback):
                         res = self.sample_one(T)
                         outf.write('\nT=%.1f \n%s \n' % (T, res[1:]))
 
+    def on_batch_end(self, batch, logs={}):
+        if (batch + 1) % 10 == 0:
+            print('\nBatch %d text sampling: ' % batch)
+            with open(output_fname, 'a') as outf:
+                outf.write('\n========= Batch %d =========' % batch)
+                for T in [.3, .5, .7, .9, 1.1]:
+                    print('\tsampling, T= %.1f...' % T)
+                    for _ in range(5):
+                        self.model.reset_states()
+                        res = self.sample_one(T)
+                        outf.write(res + '\n')
 
-model = Sequential()
-model.add(LSTM(128, activation='tanh', return_sequences=True, input_shape=[max_sentence_len, num_chars]))
-model.add(Dropout(0.2))
-model.add(TimeDistributed(Dense(num_chars)))
-model.add(Activation('softmax'))
+
+class LossHistory(Callback):
+    def on_train_begin(self, logs={}):
+        self.loss = []
+        self.acc = []
+
+    def on_batch_end(self, batch, logs={}):
+        self.loss.append(logs.get('loss'))
+        self.acc.append(logs.get('acc'))
+        if (batch + 1) % 100 == 0:
+            with open(batchout_fname, 'a') as outf:
+                for i in range(100):
+                    outf.write('%d\t%.6f\t%.6f\n' %
+                               (batch + i - 99, self.loss[i - 100], self.acc[i - 100]))
+
+
+
+# simple model
+# model = Sequential()
+# model.add(LSTM(128, activation='tanh', return_sequences=True, input_shape=[max_sentence_len, num_chars]))
+# model.add(Dropout(0.2))
+# model.add(TimeDistributed(Dense(num_chars)))
+# model.add(Activation('softmax'))
+
+# deep model
+
+vec = Input(shape=(None, num_chars))
+l1 = LSTM(128, activation='tanh', return_sequences=True)(vec)
+l1_d = Dropout(0.2)(l1)
+
+input2 = concatenate([vec, l1_d])
+l2 = LSTM(128, activation='tanh', return_sequences=True)(input2)
+l2_d = Dropout(0.2)(l2)
+
+input3 = concatenate([vec, l2_d])
+l3 = LSTM(128, activation='tanh', return_sequences=True)(input3)
+l3_d = Dropout(0.2)(l2)
+
+input_d = concatenate([l1_d, l2_d, l3_d])
+dense3 = TimeDistributed(Dense(num_chars))(input_d)
+output_res = Activation('softmax')(dense3)
+model = Model(input=vec, outputs=output_res)
 
 model.compile(loss='categorical_crossentropy', optimizer=Adam(clipnorm=1.), metrics=['accuracy'])
 
