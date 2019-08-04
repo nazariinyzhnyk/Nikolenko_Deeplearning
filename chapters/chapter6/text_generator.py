@@ -14,6 +14,8 @@ input_frame = 'shakespeare_short.txt'
 model_fname = 'model_keras'
 output_fname = 'output.txt'
 batchout_fname = 'batch_out.txt'
+USE_SIMPLE_MODEL = False
+
 
 with open(input_frame) as f:
     for line in f:
@@ -158,32 +160,32 @@ class LossHistory(Callback):
                                (batch + i - 99, self.loss[i - 100], self.acc[i - 100]))
 
 
+if USE_SIMPLE_MODEL:
+    # simple model
+    vec = Input(shape=(None, num_chars))
+    l1 = LSTM(128, activation='tanh', return_sequences=True)(vec)
+    l1_d = Dropout(0.2)(l1)
+    dense = TimeDistributed(Dense(num_chars))(l1_d)
+    output_res = Activation('softmax')(dense)
+    model = Model(input=vec, outputs=output_res)
+else:
+    # deep model
+    vec = Input(shape=(None, num_chars))
+    l1 = LSTM(128, activation='tanh', return_sequences=True)(vec)
+    l1_d = Dropout(0.2)(l1)
 
-# simple model
-# model = Sequential()
-# model.add(LSTM(128, activation='tanh', return_sequences=True, input_shape=[max_sentence_len, num_chars]))
-# model.add(Dropout(0.2))
-# model.add(TimeDistributed(Dense(num_chars)))
-# model.add(Activation('softmax'))
+    input2 = concatenate([vec, l1_d])
+    l2 = LSTM(128, activation='tanh', return_sequences=True)(input2)
+    l2_d = Dropout(0.2)(l2)
 
-# deep model
+    input3 = concatenate([vec, l2_d])
+    l3 = LSTM(128, activation='tanh', return_sequences=True)(input3)
+    l3_d = Dropout(0.2)(l2)
 
-vec = Input(shape=(None, num_chars))
-l1 = LSTM(128, activation='tanh', return_sequences=True)(vec)
-l1_d = Dropout(0.2)(l1)
-
-input2 = concatenate([vec, l1_d])
-l2 = LSTM(128, activation='tanh', return_sequences=True)(input2)
-l2_d = Dropout(0.2)(l2)
-
-input3 = concatenate([vec, l2_d])
-l3 = LSTM(128, activation='tanh', return_sequences=True)(input3)
-l3_d = Dropout(0.2)(l2)
-
-input_d = concatenate([l1_d, l2_d, l3_d])
-dense3 = TimeDistributed(Dense(num_chars))(input_d)
-output_res = Activation('softmax')(dense3)
-model = Model(input=vec, outputs=output_res)
+    input_d = concatenate([l1_d, l2_d, l3_d])
+    dense3 = TimeDistributed(Dense(num_chars))(input_d)
+    output_res = Activation('softmax')(dense3)
+    model = Model(input=vec, outputs=output_res)
 
 model.compile(loss='categorical_crossentropy', optimizer=Adam(clipnorm=1.), metrics=['accuracy'])
 
